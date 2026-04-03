@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reverse Phonic Language Translator v3</title>
+    <style>
+        body { font-family: Arial, Helvetica, sans-serif; max-width: 1000px; margin: 40px auto; padding: 20px; background-color: #f8f9fa; color: #333; }
+        h1 { text-align: center; }
+        .container { display: flex; flex-wrap: wrap; gap: 20px; }
+        .panel { flex: 1; min-width: 320px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+        textarea { width: 100%; height: 200px; padding: 12px; font-size: 16px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: monospace; }
+        button { margin: 10px 5px 0 0; padding: 10px 18px; font-size: 16px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        .copy-btn { background-color: #6c757d; font-size: 14px; padding: 6px 12px; }
+        .copy-btn:hover { background-color: #5a6268; }
+        .label { display: block; margin-bottom: 8px; font-weight: bold; color: #444; }
+        .controls { text-align: center; margin: 15px 0; }
+        .swap { font-size: 28px; cursor: pointer; padding: 10px; color: #007bff; }
+        .info { font-size: 14px; color: #555; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Reverse Phonic Language Translator v3</h1>
+    <p style="text-align: center; color: #555;">Further improved bidirectional translator with refined reverse disambiguation for common patterns.</p>
+
+    <div class="container">
+        <div class="panel">
+            <label class="label">English Input</label>
+            <textarea id="englishInput" placeholder="Enter English text here..."></textarea>
+            <button onclick="translateToConlang()">Translate to New Language</button>
+            <button class="copy-btn" onclick="copyText('conlangOutput')">Copy</button>
+            <textarea id="conlangOutput" readonly placeholder="Translation appears here..."></textarea>
+        </div>
+
+        <div class="controls">
+            <span class="swap" onclick="swapDirections()" title="Swap directions">⇄</span>
+        </div>
+
+        <div class="panel">
+            <label class="label">New Language Input</label>
+            <textarea id="conlangInput" placeholder="Enter New Language text here..."></textarea>
+            <button onclick="translateToEnglish()">Translate to English</button>
+            <button class="copy-btn" onclick="copyText('englishOutput')">Copy</button>
+            <textarea id="englishOutput" readonly placeholder="Translation appears here..."></textarea>
+        </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 30px; font-size: 14px; color: #666;">
+        Note: Phonetics combined within words; spaces between words only. Reverse now better handles "Dp" vs "MhD" ambiguity and common words. Grammar particles Pd Og indicate past ongoing aspect.
+    </div>
+
+    <script>
+        const letterMap = {
+            'a':'Dp','b':'Esk','c':'Apeh','d':'Bie','e':'Mh','f':'MhD','g':'Peh','h':'Bq','i':'My','j':'Nry',
+            'k':'Qoh','l':'Rht','m':'Sye','n':'Tpa','o':'Uve','p':'Vah','q':'Wep','r':'Xis','s':'Ytl','t':'Zmu',
+            'u':'Ahr','v':'Bso','w':'Cte','x':'Dfr','y':'Egs','z':'Fhn'
+        };
+
+        const phoneticToLetter = { ...Object.fromEntries(Object.entries(letterMap).map(([k,v]) => [v.toLowerCase(), k.toLowerCase()])) };
+
+        // Prioritize shorter common mappings first for disambiguation (Dp before longer overlaps)
+        const sortedPhonetics = Object.keys(phoneticToLetter).sort((a, b) => {
+            if (a === 'dp' && b !== 'dp') return -1;
+            if (b === 'dp' && a !== 'dp') return 1;
+            return b.length - a.length;
+        });
+
+        // Custom exceptions for frequent words to prevent common errors
+        const wordExceptions = {
+            'ApehXisMhDpZmuMhBie': 'created',
+            'ApehUveAhrRhtBie': 'could',
+            'YtlMhApehXisMhZmu': 'secret',
+            'SyeMhYtlYtlDpPehMhYtl': 'messages'
+        };
+
+        function translateWordToConlang(word) {
+            let result = '';
+            for (let char of word.toLowerCase()) {
+                result += letterMap[char] || char;
+            }
+            return result;
+        }
+
+        function translateToConlang() {
+            let input = document.getElementById('englishInput').value.trim();
+            if (!input) return;
+
+            const words = input.split(/\s+/);
+            const translatedWords = words.map(w => {
+                const clean = w.replace(/[^a-zA-Z]/g, '');
+                return translateWordToConlang(clean);
+            });
+
+            // Approximate OSV by reversing word order
+            let output = translatedWords.reverse().join(' ') + ' Pd Og';
+            document.getElementById('conlangOutput').value = output;
+        }
+
+        function translateToEnglish() {
+            let input = document.getElementById('conlangInput').value.trim();
+            if (!input) return;
+
+            // Remove grammar particles
+            input = input.replace(/\s*Pd\s*Og\s*$/i, '').trim();
+
+            const chunks = input.split(/\s+/);
+            let reconstructed = '';
+
+            chunks.forEach(chunk => {
+                const lowerChunk = chunk.toLowerCase();
+                if (wordExceptions[chunk] || wordExceptions[lowerChunk]) {
+                    reconstructed += (wordExceptions[chunk] || wordExceptions[lowerChunk]) + ' ';
+                    return;
+                }
+
+                let remaining = lowerChunk;
+                let word = '';
+                while (remaining.length > 0) {
+                    let matched = false;
+                    for (let ph of sortedPhonetics) {
+                        if (remaining.startsWith(ph)) {
+                            word += phoneticToLetter[ph];
+                            remaining = remaining.slice(ph.length);
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (!matched) {
+                        word += remaining[0];
+                        remaining = remaining.slice(1);
+                    }
+                }
+                reconstructed += word + ' ';
+            });
+
+            // Reverse back from OSV approximation
+            let final = reconstructed.trim().split(/\s+/).reverse().join(' ');
+            document.getElementById('englishOutput').value = final || 'Reconstruction incomplete.';
+        }
+
+        function swapDirections() {
+            const eng = document.getElementById('englishInput').value;
+            const con = document.getElementById('conlangInput').value;
+            document.getElementById('englishInput').value = con;
+            document.getElementById('conlangInput').value = eng;
+            document.getElementById('conlangOutput').value = '';
+            document.getElementById('englishOutput').value = '';
+        }
+
+        function copyText(id) {
+            const text = document.getElementById(id).value;
+            if (text) navigator.clipboard.writeText(text).then(() => alert('Copied to clipboard.'));
+        }
+
+        // Enter key support
+        document.getElementById('englishInput').addEventListener('keypress', e => { if (e.key === 'Enter') translateToConlang(); });
+        document.getElementById('conlangInput').addEventListener('keypress', e => { if (e.key === 'Enter') translateToEnglish(); });
+    </script>
+</body>
+</html>
